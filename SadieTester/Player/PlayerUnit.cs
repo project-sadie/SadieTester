@@ -27,6 +27,12 @@ public class PlayerUnit(
 
     public bool TrySendHandshake()
     {
+        if (player.Tokens.Count < 1)
+        {
+            Log.Logger.Warning($"SSO record missing for player {player.Username}");
+            return false;
+        }
+        
         var token = player.Tokens.FirstOrDefault();
         
         if (token == null)

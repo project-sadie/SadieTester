@@ -1,6 +1,6 @@
 namespace SadieTester.Player;
 
-public class PlayerRepository(Dictionary<int, PlayerUnit> playerUnits)
+public class PlayerRepository()
 {
-    public Dictionary<int, PlayerUnit> PlayerUnits { get; } = playerUnits;
+    public Dictionary<int, PlayerUnit> PlayerUnits { get; } = [];
 }

@@ -9,7 +9,7 @@ using ServiceCollection = SadieTester.ServiceCollection;
 
 var host = Host.CreateDefaultBuilder()
     .ConfigureServices((context, collection) => ServiceCollection.AddServices(collection, context.Configuration))
-    .UseSerilog((hostContext, _, logger) => logger.WriteTo.Console())
+    .UseSerilog((hostContext, _, logger) => logger.ReadFrom.Configuration(hostContext.Configuration))
     .Build();
 
 var services = host.Services;
@@ -23,7 +23,8 @@ while (true)
 
     var player = await dbContext
         .Players
-        .FirstOrDefaultAsync(x => x.Username.StartsWith("mock_"));
+        .Include(x => x.Tokens)
+        .FirstOrDefaultAsync(x => x.Username.EndsWith(".mock"));
 
     if (player == null)
     {

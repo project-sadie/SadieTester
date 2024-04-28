@@ -18,9 +18,10 @@ public static class ServiceCollection
     {
         var host = config.GetValue<string>("Networking:Host");
         var port = config.GetValue<int>("Networking:Port");
+        var useWss = config.GetValue<bool>("Networking:UseWss");
         
         serviceCollection.AddSingleton<PlayerRepository>();
-        serviceCollection.AddTransient<WebsocketClient>(provider => new WebsocketClient(new Uri($"wss://{host}:{port}")));
+        serviceCollection.AddTransient<WebsocketClient>(provider => new WebsocketClient(new Uri($"{(useWss ? "ws":"wss")}://{host}:{port}")));
         serviceCollection.AddTransient<PlayerUnit>();
 
         serviceCollection.AddSingleton(provider => new ConcurrentDictionary<int, INetworkPacketEvent>
@@ -28,7 +29,7 @@ public static class ServiceCollection
             [2491] = new SecureLoginOkEvent(),
         });
         
-        serviceCollection.AddSingleton<ClientPacketHandler>();
+        serviceCollection.AddSingleton<INetworkPacketHandler, ClientPacketHandler>();
         
         var connectionString = config.GetConnectionString("Default");
 
@@ -45,6 +46,8 @@ public static class ServiceCollection
                     maxRetryDelay: TimeSpan.FromSeconds(30),
                     errorNumbersToAdd: null
                 ));
+            
+            options.UseSnakeCaseNamingConvention();
         });
         
         serviceCollection.AddSingleton<PlayerProfile>();

@@ -1,0 +1,26 @@
+{
+  "Serilog": {
+    "Using": [ "Serilog.Sinks.Console" ],
+    "MinimumLevel": {
+      "Default": "Verbose",
+      "Override": {
+        "Microsoft": "Warning",
+        "Microsoft.EntityFrameworkCore.Database.Command": "Warning"
+      }
+    },
+    "WriteTo": [
+      {
+        "Name": "Console"
+      }
+    ],
+    "Enrich": [ "FromLogContext", "WithExceptionDetails" ]
+  },
+  "ConnectionStrings": {
+    "Default": "Server=;Database=sadie;Uid=;Pwd=;"
+  },
+  "Networking": {
+    "Host": "127.0.0.1",
+    "Port": 2097,
+    "UseWss": false
+  }
+}
