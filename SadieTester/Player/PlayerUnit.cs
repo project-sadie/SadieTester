@@ -63,7 +63,7 @@ public class PlayerUnit(
         
         while (!HasAuthenticated)
         {
-            if ((DateTime.Now - started).TotalSeconds > 10)
+            if ((DateTime.Now - started).TotalSeconds > 5)
             {
                 return false;
             }

@@ -16,6 +16,7 @@ var services = host.Services;
 var mapper = services.GetRequiredService<IMapper>();
 var dbContext = services.GetRequiredService<SadieContext>();
 var playerRepo = services.GetRequiredService<PlayerRepository>();
+var idsLoaded = new List<int>();
 
 while (true)
 {
@@ -23,14 +24,18 @@ while (true)
 
     var player = await dbContext
         .Players
+        .Where(x => !idsLoaded.Contains(x.Id))
         .Include(x => x.Tokens)
+        .OrderByDescending(x => x.Id)
         .FirstOrDefaultAsync(x => x.Username.EndsWith(".mock"));
-
+    
     if (player == null)
     {
         Log.Logger.Warning("Ran out of player records to load...");
         break;
     }
+    
+    idsLoaded.Add(player.Id);
     
     Log.Logger.Debug($"Preparing to load player '{player.Username}'");
 
@@ -50,8 +55,10 @@ while (true)
         playerRepo.PlayerUnits.Remove(player.Id);
         Log.Logger.Error($"Failed to load player '{player.Username}', WaitForAuthentication timeout");
     }
-    
-    Log.Logger.Debug($"Player '{player.Username}' finished loading!");
+    else
+    {
+        Log.Logger.Debug($"Player '{player.Username}' finished loading!");
+    }
     
     Console.ReadKey();
 }

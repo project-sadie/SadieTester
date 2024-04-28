@@ -21,7 +21,7 @@ public static class ServiceCollection
         var useWss = config.GetValue<bool>("Networking:UseWss");
         
         serviceCollection.AddSingleton<PlayerRepository>();
-        serviceCollection.AddTransient<WebsocketClient>(provider => new WebsocketClient(new Uri($"{(useWss ? "ws":"wss")}://{host}:{port}")));
+        serviceCollection.AddTransient<WebsocketClient>(provider => new WebsocketClient(new Uri($"{(useWss ? "wss":"ws")}://{host}:{port}")));
         serviceCollection.AddTransient<PlayerUnit>();
 
         serviceCollection.AddSingleton(provider => new ConcurrentDictionary<int, INetworkPacketEvent>

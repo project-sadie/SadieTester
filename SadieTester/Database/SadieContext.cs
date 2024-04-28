@@ -12,5 +12,9 @@ public class SadieContext(DbContextOptions<SadieContext> options) : DbContext(op
     {
         modelBuilder.Entity<Models.Player>().ToTable("players");
         modelBuilder.Entity<PlayerSsoToken>().ToTable("player_sso_tokens");
+
+
+        modelBuilder.Entity<Models.Player>()
+            .HasMany(c => c.Tokens);
     }
 }
