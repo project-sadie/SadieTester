@@ -1,6 +1,9 @@
-using System.Security.Authentication;
+using System.Drawing;
 using SadieTester.Networking.Packets;
+using SadieTester.Networking.Packets.Writers;
 using SadieTester.Networking.Packets.Writers.Handshake;
+using SadieTester.Networking.Packets.Writers.Rooms;
+using SadieTester.Rooms;
 using Serilog;
 using Websocket.Client;
 
@@ -9,15 +12,15 @@ namespace SadieTester.Player;
 public class PlayerUnit(
     Database.Models.Player player, 
     IWebsocketClient websocketClient, 
-    INetworkPacketHandler packetHandler) : NetworkPacketDecoder
+    INetworkPacketHandler packetHandler,
+    PlayerRepository playerRepository) : NetworkPacketDecoder, IAsyncDisposable
 {
     public async Task ConnectAsync()
     {
-        websocketClient.ReconnectTimeout = TimeSpan.FromSeconds(30);
-        websocketClient.ReconnectionHappened.Subscribe(info => 
-            Console.WriteLine($"Reconnection happened, type: {info.Type}"));
-
+        websocketClient.ReconnectTimeout = TimeSpan.FromSeconds(120);
         websocketClient.MessageReceived.Subscribe(OnMessageReceived);
+        websocketClient.DisconnectionHappened.Subscribe(OnDisconnect);
+        websocketClient.ReconnectionHappened.Subscribe(OnReconnect);
         
         await Task.Run(() =>
         {
@@ -25,6 +28,20 @@ public class PlayerUnit(
         });
     }
 
+    private async void OnReconnect(ReconnectionInfo info)
+    {
+        Log.Logger.Warning($"Player reconnected: {info.Type.ToString()}");
+        playerRepository.PlayerUnits.TryRemove(player.Id, out var _);
+    }
+
+    private async void OnDisconnect(DisconnectionInfo info)
+    {
+        Log.Logger.Error($"{player.Username} disconnected: {info.Type.ToString()} {info.CloseStatusDescription}");
+        playerRepository.PlayerUnits.TryRemove(player.Id, out var _);
+    }
+
+    public IWebsocketClient Client => websocketClient;
+    
     public bool TrySendHandshake()
     {
         if (player.Tokens.Count < 1)
@@ -56,21 +73,109 @@ public class PlayerUnit(
     }
 
     public bool HasAuthenticated { get; set; }
+    public bool InRoom { get; set; }
+    public PlayerUnitRoomSession? RoomSession { get; set; }
+    public DateTime LastCheck { get; set; }
 
-    public async Task<bool> WaitForAuthenticationAsync()
+    public async Task WaitForAuthenticationAsync(Action onSuccess, Action onFail)
     {
         var started = DateTime.Now;
         
         while (!HasAuthenticated)
         {
-            if ((DateTime.Now - started).TotalSeconds > 5)
+            if ((DateTime.Now - started).TotalSeconds > 15)
             {
-                return false;
+                onFail.Invoke();
+                return;
             }
             
-            await Task.Delay(500);
+            await Task.Delay(100);
         }
 
-        return true;
+        if ((DateTime.Now - started).TotalSeconds > 10)
+        {
+            Log.Logger.Warning($"Took {(DateTime.Now - started).TotalSeconds} seconds for {player.Username} to login");
+        }
+        
+        onSuccess.Invoke();
+    }
+
+    public void LoadRoom(int roomId)
+    {
+        RoomSession = null;
+        websocketClient.Send(new LoadRoomWriter(roomId).GetAllBytes());
+    }
+
+    public void SayInRoom(string message, int bubbleId)
+    {
+        websocketClient.Send(new RoomUserChat(message, bubbleId).GetAllBytes());
+    }
+
+    public void WalkTo(Point point)
+    {
+        websocketClient.Send(new RoomUserWalkWriter(point.X, point.Y).GetAllBytes());
+    }
+
+    public async Task RunPeriodicChecksAsync()
+    {
+        if (!HasAuthenticated)
+        {
+            return;
+        }
+
+        LastCheck = DateTime.Now;
+        await CheckRandomnessAsync();
+    }
+
+    private async Task CheckRandomnessAsync()
+    {
+        if (RoomSession == null)
+        {
+            return;
+        }
+        
+        if (RandomHelpers.A20PercentChance())
+        {
+            var bubbleId = RandomHelpers.GetRandomBubbleId();
+            SayInRoom(RandomHelpers.GetRandomChatMessage(), bubbleId);
+            return;
+        }
+        
+        if (RandomHelpers.A10PercentChance())
+        {
+            WalkTo(RoomSession.GetRandomPoint());
+        }
+        
+        if (RandomHelpers.A30PercentChance() && RoomSession.Users.Count > 3)
+        {
+            LookToPoint(RoomSession.GetRandomUser(player.Id).Position);
+        }
+        
+        if (RandomHelpers.A1PercentChance())
+        {
+            websocketClient.Send(new RoomUserDanceWriter(GlobalState.Random.Next(1, 4)).GetAllBytes());
+        }
+        
+        // Signs
+        // Sit
+
+        if (RandomHelpers.A0_5PercentChance())
+        {
+            var randomRoom = GlobalState.Random.Next(1, 9);
+            LoadRoom(randomRoom);
+        }
+    }
+
+    public void LookToPoint(Point point)
+    {
+        websocketClient.Send(new RoomUserLookToPointWriter(point).GetAllBytes());
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (websocketClient is IAsyncDisposable websocketClientAsyncDisposable)
+            await websocketClientAsyncDisposable.DisposeAsync();
+        else
+            websocketClient.Dispose();
     }
 }

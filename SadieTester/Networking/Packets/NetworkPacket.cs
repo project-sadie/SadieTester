@@ -1,6 +1,6 @@
 ﻿namespace SadieTester.Networking.Packets;
 
-public class NetworkPacket(int packetId, byte[] packetData) : NetworkPacketReader(packetData), INetworkPacket
+public class NetworkPacket(short packetId, byte[] packetData) : NetworkPacketReader(packetData), INetworkPacket
 {
-    public int PacketId { get; } = packetId;
+    public short PacketId { get; } = packetId;
 }

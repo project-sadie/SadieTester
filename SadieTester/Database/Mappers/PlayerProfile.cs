@@ -8,11 +8,12 @@ namespace SadieTester.Database.Mappers;
 
 public class PlayerProfile : Profile
 {
-    public PlayerProfile(IServiceProvider provider)
+    public PlayerProfile(IServiceProvider provider, PlayerRepository playerRepository)
     {
         CreateMap<Models.Player, PlayerUnit>()
             .ConstructUsing(x => new PlayerUnit(x,
                 provider.GetRequiredService<WebsocketClient>(),
-                provider.GetRequiredService<INetworkPacketHandler>()));
+                provider.GetRequiredService<INetworkPacketHandler>(),
+                playerRepository));
     }
 }

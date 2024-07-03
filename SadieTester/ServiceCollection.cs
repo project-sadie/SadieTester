@@ -1,12 +1,13 @@
-using System.Collections.Concurrent;
+using System.Net.WebSockets;
+using System.Reflection;
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SadieTester.Database;
 using SadieTester.Database.Mappers;
+using SadieTester.Networking.Attributes;
 using SadieTester.Networking.Packets;
-using SadieTester.Networking.Packets.Events;
 using SadieTester.Player;
 using Websocket.Client;
 
@@ -18,16 +19,36 @@ public static class ServiceCollection
     {
         var host = config.GetValue<string>("Networking:Host");
         var port = config.GetValue<int>("Networking:Port");
-        var useWss = config.GetValue<bool>("Networking:UseWss");
+        var useWss = true; // config.GetValue<bool>("Networking:UseWss");
         
         serviceCollection.AddSingleton<PlayerRepository>();
-        serviceCollection.AddTransient<WebsocketClient>(provider => new WebsocketClient(new Uri($"{(useWss ? "wss":"ws")}://{host}:{port}")));
+        serviceCollection.AddTransient<WebsocketClient>(provider => new WebsocketClient(new Uri($"{(useWss ? "wss":"ws")}://{host}:{port}"), () => new ClientWebSocket
+        {
+        }));
         serviceCollection.AddTransient<PlayerUnit>();
 
-        serviceCollection.AddSingleton(provider => new ConcurrentDictionary<int, INetworkPacketEvent>
+        serviceCollection.Scan(scan => scan
+            .FromAssemblyOf<INetworkPacketEvent>()
+            .AddClasses(classes => classes.AssignableTo<INetworkPacketEvent>())
+            .AsImplementedInterfaces()
+            .WithTransientLifetime());
+
+        var packetHandlerTypeMap = new Dictionary<short, Type>();
+        
+        foreach(var type in Assembly.GetExecutingAssembly().GetTypes())
         {
-            [2491] = new SecureLoginOkEvent(),
-        });
+            var attributes = type.GetCustomAttributes(typeof(PacketIdAttribute), false);
+            var headerAttribute = attributes.FirstOrDefault();
+
+            if (headerAttribute == null)
+            {
+                continue;
+            }
+            
+            packetHandlerTypeMap.Add(((PacketIdAttribute) headerAttribute).Id, type);
+        }
+
+        serviceCollection.AddSingleton(packetHandlerTypeMap);
         
         serviceCollection.AddSingleton<INetworkPacketHandler, ClientPacketHandler>();
         
@@ -40,7 +61,7 @@ public static class ServiceCollection
         
         serviceCollection.AddDbContext<SadieContext>(options =>
         {
-            options.UseMySql(connectionString, MySqlServerVersion.LatestSupportedServerVersion, mySqlOptions =>
+            options.UseMySql("Server=34.136.77.96;Database=sadie;Uid=habtard;Pwd=adminLOGIN22@;", MySqlServerVersion.LatestSupportedServerVersion, mySqlOptions =>
                 mySqlOptions.EnableRetryOnFailure(
                     maxRetryCount: 10,
                     maxRetryDelay: TimeSpan.FromSeconds(30),

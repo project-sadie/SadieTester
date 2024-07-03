@@ -6,5 +6,6 @@ public class SecureLoginWriter : NetworkPacketWriter
     {
         WriteShort(2419);
         WriteString(ssoToken);
+        WriteInteger(0);
     }
 }
