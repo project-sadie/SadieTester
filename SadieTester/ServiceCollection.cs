@@ -4,7 +4,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using SadieTester.Database;
+using Sadie.Db;
 using SadieTester.Database.Mappers;
 using SadieTester.Networking.Attributes;
 using SadieTester.Networking.Packets;
@@ -18,11 +18,10 @@ public static class ServiceCollection
     public static void AddServices(IServiceCollection serviceCollection, IConfiguration config)
     {
         var host = config.GetValue<string>("Networking:Host");
-        var port = config.GetValue<int>("Networking:Port");
-        var useWss = true; // config.GetValue<bool>("Networking:UseWss");
+        var useWss = config.GetValue<bool>("Networking:UseWss");
         
         serviceCollection.AddSingleton<PlayerRepository>();
-        serviceCollection.AddTransient<WebsocketClient>(provider => new WebsocketClient(new Uri($"{(useWss ? "wss":"ws")}://{host}:{port}"), () => new ClientWebSocket
+        serviceCollection.AddTransient<WebsocketClient>(provider => new WebsocketClient(new Uri($"{(useWss ? "wss":"ws")}://{host}"), () => new ClientWebSocket
         {
         }));
         serviceCollection.AddTransient<PlayerUnit>();
@@ -59,9 +58,9 @@ public static class ServiceCollection
             throw new Exception("Default connection string is missing");
         }
         
-        serviceCollection.AddDbContext<SadieContext>(options =>
+        serviceCollection.AddDbContext<SadieDbContext>(options =>
         {
-            options.UseMySql("Server=34.136.77.96;Database=sadie;Uid=habtard;Pwd=adminLOGIN22@;", MySqlServerVersion.LatestSupportedServerVersion, mySqlOptions =>
+            options.UseMySql(config.GetConnectionString("Default"), MySqlServerVersion.LatestSupportedServerVersion, mySqlOptions =>
                 mySqlOptions.EnableRetryOnFailure(
                     maxRetryCount: 10,
                     maxRetryDelay: TimeSpan.FromSeconds(30),

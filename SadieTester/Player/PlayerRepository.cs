@@ -4,7 +4,7 @@ namespace SadieTester.Player;
 
 public class PlayerRepository : IAsyncDisposable
 {
-    public ConcurrentDictionary<int, PlayerUnit> PlayerUnits { get; } = [];
+    public ConcurrentDictionary<long, PlayerUnit> PlayerUnits { get; } = [];
     
     public async Task WorkAsync(CancellationToken token)
     {

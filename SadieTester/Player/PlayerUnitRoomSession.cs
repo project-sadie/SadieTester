@@ -26,7 +26,7 @@ public class PlayerUnitRoomSession
         return new Point(randomX, randomY);
     }
 
-    public RoomUser GetRandomUser(int excludeId)
+    public RoomUser GetRandomUser(long excludeId)
     {
         var users = Users.Where(x => x.Id != excludeId).ToList();
         return users[GlobalState.Random.Next(0, users.Count - 1)];

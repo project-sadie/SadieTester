@@ -5,14 +5,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using SadieTester.Database;
+using Sadie.Db;
 using SadieTester.Player;
 using Serilog;
 using Serilog.Events;
 
 namespace SadieTester;
 
-internal class Program
+internal static class Program
 {
     public class Options
     {
@@ -92,7 +92,6 @@ internal class Program
         var host = Host.CreateDefaultBuilder()
             .ConfigureHostConfiguration(configurationBuilder =>
             {
-                configurationBuilder.SetBasePath("/mnt/storage/dev/habbo/SadieTester/SadieTester");
                 configurationBuilder.AddJsonFile("appsettings.json", optional: false);
             })
             .ConfigureServices((context, collection) => ServiceCollection.AddServices(collection, context.Configuration))
@@ -101,7 +100,7 @@ internal class Program
 
         var services = host.Services;
         var mapper = services.GetRequiredService<IMapper>();
-        var dbContext = services.GetRequiredService<SadieContext>();
+        var dbContext = services.GetRequiredService<SadieDbContext>();
 
         _playerRepository = services.GetRequiredService<PlayerRepository>();
         _ = _playerRepository.WorkAsync(CancellationToken.None);
@@ -113,7 +112,7 @@ internal class Program
         }
 
         var loaded = 0;
-        var excludedIds = new List<int>();
+        var excludedIds = new List<long>();
         
         while (maxPlayerCount == 0 || loaded < maxPlayerCount)
         {
@@ -184,7 +183,7 @@ internal class Program
 
         return;
 
-        async Task<Database.Models.Player?> GetPlayerAsync(SadieContext dbContext, ICollection<int> excludedIds)
+        async Task<Sadie.Db.Models.Players.Player?> GetPlayerAsync(SadieDbContext dbContext, ICollection<long> excludedIds)
         {
             return await dbContext
                 .Players

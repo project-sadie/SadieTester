@@ -1,7 +1,6 @@
 using SadieTester.Networking.Attributes;
 using SadieTester.Networking.Packets.Writers;
 using SadieTester.Player;
-using SadieTester.Rooms;
 
 namespace SadieTester.Networking.Packets.Events.Rooms.Items;
 

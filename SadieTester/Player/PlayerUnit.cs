@@ -1,16 +1,14 @@
 using System.Drawing;
 using SadieTester.Networking.Packets;
-using SadieTester.Networking.Packets.Writers;
 using SadieTester.Networking.Packets.Writers.Handshake;
 using SadieTester.Networking.Packets.Writers.Rooms;
-using SadieTester.Rooms;
 using Serilog;
 using Websocket.Client;
 
 namespace SadieTester.Player;
 
 public class PlayerUnit(
-    Database.Models.Player player, 
+    Sadie.Db.Models.Players.Player player, 
     IWebsocketClient websocketClient, 
     INetworkPacketHandler packetHandler,
     PlayerRepository playerRepository) : NetworkPacketDecoder, IAsyncDisposable
