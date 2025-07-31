@@ -25,10 +25,21 @@ public class PlayerRepository : IAsyncDisposable
     
     private async Task RunPeriodicChecksAsync()
     {
-        foreach (var player in PlayerUnits.Values.Where(x => (DateTime.Now - x.LastCheck).TotalSeconds >= 10))
+        var now = DateTime.Now;
+
+        foreach (var player in PlayerUnits.Values)
         {
-            await player.RunPeriodicChecksAsync();
+            if ((now - player.LastPong).TotalSeconds >= 15)
+            {
+                player.Pong();
+            }
         }
+
+        var periodicTasks = PlayerUnits.Values
+            .Where(player => (now - player.LastCheck).TotalSeconds >= 10)
+            .Select(player => player.RunPeriodicChecksAsync());
+
+        await Task.WhenAll(periodicTasks);
     }
 
     public async ValueTask DisposeAsync()
