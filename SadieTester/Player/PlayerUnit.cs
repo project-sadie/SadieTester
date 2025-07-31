@@ -1,6 +1,9 @@
 using System.Drawing;
+using Bogus;
 using SadieTester.Networking.Packets;
+using SadieTester.Networking.Packets.Writers;
 using SadieTester.Networking.Packets.Writers.Handshake;
+using SadieTester.Networking.Packets.Writers.Navigator;
 using SadieTester.Networking.Packets.Writers.Rooms;
 using Serilog;
 using Websocket.Client;
@@ -29,7 +32,7 @@ public class PlayerUnit(
     private async void OnReconnect(ReconnectionInfo info)
     {
         Log.Logger.Warning($"Player reconnected: {info.Type.ToString()}");
-        playerRepository.PlayerUnits.TryRemove(player.Id, out var _);
+        // playerRepository.PlayerUnits.TryRemove(player.Id, out var _);
     }
 
     private async void OnDisconnect(DisconnectionInfo info)
@@ -74,6 +77,7 @@ public class PlayerUnit(
     public bool InRoom { get; set; }
     public PlayerUnitRoomSession? RoomSession { get; set; }
     public DateTime LastCheck { get; set; }
+    public DateTime LastPong { get; set; }
 
     public async Task WaitForAuthenticationAsync(Action onSuccess, Action onFail)
     {
@@ -104,9 +108,9 @@ public class PlayerUnit(
         websocketClient.Send(new LoadRoomWriter(roomId).GetAllBytes());
     }
 
-    public void SayInRoom(string message, int bubbleId)
+    public void SayInRoom(string message, int bubble = 0)
     {
-        websocketClient.Send(new RoomUserChat(message, bubbleId).GetAllBytes());
+        websocketClient.Send(new RoomUserChat(message, bubble).GetAllBytes());
     }
 
     public void WalkTo(Point point)
@@ -125,42 +129,109 @@ public class PlayerUnit(
         await CheckRandomnessAsync();
     }
 
+    private int NoRoomTicks = 2;
+    
     private async Task CheckRandomnessAsync()
     {
         if (RoomSession == null)
         {
+            if (NoRoomTicks >= 2)
+            {
+                await WaitForNavigatorResultsAsync(
+                    TimeSpan.FromSeconds(3));
+
+                if (NavigatorSearchResults.Count != 0)
+                {
+                    if (SecureRandom.OneIn(8))
+                    {
+                        CreateRoom();
+                    }
+                    else
+                    {
+                        var roomId = NavigatorSearchResults
+                            .OrderBy(x => x.UsersNow)
+                            .First()
+                            .Id;
+
+                        LoadRoom(roomId);
+                        NavigatorSearchResults.Clear();
+                    }
+                }
+                else
+                {
+                    CreateRoom();
+                }
+            }
+            
+            NoRoomTicks++;
             return;
         }
+
+        NoRoomTicks = 0;
         
-        if (RandomHelpers.A20PercentChance())
+        if (SecureRandom.OneIn(5))
         {
-            var bubbleId = RandomHelpers.GetRandomBubbleId();
-            SayInRoom(RandomHelpers.GetRandomChatMessage(), bubbleId);
+            SayInRoom(RandomHelpers.GetRandomChatMessage());
             return;
         }
         
-        if (RandomHelpers.A10PercentChance())
+        if (SecureRandom.OneIn(8))
         {
             WalkTo(RoomSession.GetRandomPoint());
         }
         
-        if (RandomHelpers.A30PercentChance() && RoomSession.Users.Count > 3)
+        if (SecureRandom.OneIn(4) && RoomSession.Users.Count > 2)
         {
             LookToPoint(RoomSession.GetRandomUser(player.Id).Position);
         }
         
-        if (RandomHelpers.A1PercentChance())
+        if (SecureRandom.OneIn(50))
         {
             websocketClient.Send(new RoomUserDanceWriter(GlobalState.Random.Next(1, 4)).GetAllBytes());
         }
-        
-        // Signs
-        // Sit
 
-        if (RandomHelpers.A0_5PercentChance())
+        if (SecureRandom.OneIn(80))
         {
             var randomRoom = GlobalState.Random.Next(1, 9);
             LoadRoom(randomRoom);
+        }
+    }
+
+    private void CreateRoom()
+    {
+        var faker = new Faker<CreateRoomData>()
+            .RuleFor(u => u.Name, f => f.Address.StreetAddress())
+            .RuleFor(u => u.Description, f => f.Lorem.Sentences(5))
+            .RuleFor(u => u.Layout, f => ModelSelector.GetRandomModel());
+
+        var data = faker.Generate();
+        
+        websocketClient.Send(new CreateRoomWriter(data).GetAllBytes());
+    }
+
+    public List<NavigatorSearchRoomResult> NavigatorSearchResults = [];
+    
+    private async Task WaitForNavigatorResultsAsync(TimeSpan timeOut)
+    {
+        if (NavigatorSearchResults.Any())
+        {
+            return;
+        }
+        
+        Log.Logger.Information("Trying to load navigator search results...");
+        
+        websocketClient.Send(new NavigatorSearchWriter().GetAllBytes());
+        
+        var started = DateTime.Now;
+        
+        while (NavigatorSearchResults.Count < 1)
+        {
+            if ((DateTime.Now - started).TotalSeconds > timeOut.TotalSeconds)
+            {
+                return;
+            }
+            
+            await Task.Delay(100);
         }
     }
 
@@ -175,5 +246,10 @@ public class PlayerUnit(
             await websocketClientAsyncDisposable.DisposeAsync();
         else
             websocketClient.Dispose();
+    }
+
+    public void Pong()
+    {
+        websocketClient.Send(new PlayerPongWriter().GetAllBytes());
     }
 }
