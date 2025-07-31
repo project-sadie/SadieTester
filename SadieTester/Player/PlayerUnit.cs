@@ -108,9 +108,16 @@ public class PlayerUnit(
         websocketClient.Send(new LoadRoomWriter(roomId).GetAllBytes());
     }
 
-    public void SayInRoom(string message, int bubble = 0)
+    public async Task SayInRoomAsync(string message, int bubble = 0)
     {
-        websocketClient.Send(new RoomUserChat(message, bubble).GetAllBytes());
+        _ = Task.Run(async () =>
+        {
+            websocketClient.Send(new RoomUserStartTypingWriter().GetAllBytes());
+            await Task.Delay(message.Length * 90);
+            websocketClient.Send(new RoomUserChat(message, bubble).GetAllBytes());
+            await Task.Delay(100);
+            websocketClient.Send(new RoomUserStopTypingWriter().GetAllBytes());
+        });
     }
 
     public void WalkTo(Point point)
@@ -129,7 +136,7 @@ public class PlayerUnit(
         await CheckRandomnessAsync();
     }
 
-    private int NoRoomTicks = 2;
+    private int NoRoomTicks = 0;
     
     private async Task CheckRandomnessAsync()
     {
@@ -169,32 +176,36 @@ public class PlayerUnit(
 
         NoRoomTicks = 0;
         
-        if (SecureRandom.OneIn(5))
-        {
-            SayInRoom(RandomHelpers.GetRandomChatMessage());
-            return;
-        }
-        
         if (SecureRandom.OneIn(8))
         {
             WalkTo(RoomSession.GetRandomPoint());
         }
-        
-        if (SecureRandom.OneIn(4) && RoomSession.Users.Count > 2)
+        else if (SecureRandom.OneIn(4) && RoomSession.Users.Count > 2)
         {
             LookToPoint(RoomSession.GetRandomUser(player.Id).Position);
         }
-        
-        if (SecureRandom.OneIn(50))
+        else if (SecureRandom.OneIn(60))
         {
             websocketClient.Send(new RoomUserDanceWriter(GlobalState.Random.Next(1, 4)).GetAllBytes());
         }
-
-        if (SecureRandom.OneIn(80))
+        else if (SecureRandom.OneIn(80))
         {
             var randomRoom = GlobalState.Random.Next(1, 9);
             LoadRoom(randomRoom);
         }
+        else if (SecureRandom.OneIn(50))
+        {
+            CreateRoom();
+        }
+        else if (SecureRandom.OneIn(5))
+        {
+            await SayInRoomAsync(RandomHelpers.GetRandomChatMessage());
+        }
+        
+        // TODO; Random signs
+        // TODO; Random sitting (:sit)
+        // TODO; Random type :about
+        // Make typing indicators work? 
     }
 
     private void CreateRoom()
@@ -243,9 +254,13 @@ public class PlayerUnit(
     public async ValueTask DisposeAsync()
     {
         if (websocketClient is IAsyncDisposable websocketClientAsyncDisposable)
+        {
             await websocketClientAsyncDisposable.DisposeAsync();
+        }
         else
+        {
             websocketClient.Dispose();
+        }
     }
 
     public void Pong()

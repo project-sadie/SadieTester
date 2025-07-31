@@ -37,7 +37,7 @@ internal static class Program
     public static async Task Main(string[] args)
     {
         var maxPlayerCount = 0;
-        var useKeyConfirm = false;
+        var useKeyConfirm = true;
         var sleepTime = 950;
         var confirmLaunch = true;
         var quiet = false;
@@ -142,8 +142,6 @@ internal static class Program
             {
                 continue;
             }
-            
-            if (loaded % 5 == 0) { Log.Logger.Debug($"Status update, {loaded} players loaded"); }
 
             _ = playerUnit.WaitForAuthenticationAsync(() =>
             {
@@ -189,7 +187,7 @@ internal static class Program
                 .Players
                 .Include(x => x.Tokens)
                 .Include(x => x.Data)
-                .Where(x => x.Username.EndsWith(".mock") && !x.Data.IsOnline && !excludedIds.Contains(x.Id))
+                .Where(x => x.Username.EndsWith("_bot") && !x.Data.IsOnline && !excludedIds.Contains(x.Id))
                 .OrderByDescending(x => x.Id)
                 .FirstOrDefaultAsync();
         }
