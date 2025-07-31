@@ -36,7 +36,7 @@ public class PlayerRepository : IAsyncDisposable
         }
 
         var periodicTasks = PlayerUnits.Values
-            .Where(player => (now - player.LastCheck).TotalSeconds >= 10)
+            .Where(player => (now - player.LastCheck).TotalSeconds >= 5)
             .Select(player => player.RunPeriodicChecksAsync());
 
         await Task.WhenAll(periodicTasks);
