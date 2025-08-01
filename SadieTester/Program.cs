@@ -185,6 +185,7 @@ internal static class Program
         {
             return await dbContext
                 .Players
+                .Where(x => x.Tokens.Any(x => x.UsedAt == null))
                 .Include(x => x.Tokens)
                 .Include(x => x.Data)
                 .Where(x => x.Username.EndsWith("_bot") && !x.Data.IsOnline && !excludedIds.Contains(x.Id))

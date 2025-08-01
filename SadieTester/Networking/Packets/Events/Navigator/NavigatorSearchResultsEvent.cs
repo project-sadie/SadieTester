@@ -10,6 +10,8 @@ public class NavigatorSearchResultsEvent : INetworkPacketEvent
 {
     public Task HandleAsync(PlayerUnit playerUnit, INetworkPacketReader reader)
     {
+        playerUnit.NavigatorSearchResults.Clear();
+        
         reader.ReadString();
         reader.ReadString();
 
@@ -65,7 +67,8 @@ public class NavigatorSearchResultsEvent : INetworkPacketEvent
                 }
             }
         }
-        
+
+        playerUnit.ReceivedNavigatorSearchResults = DateTime.Now;
         return Task.CompletedTask;
     }
 }

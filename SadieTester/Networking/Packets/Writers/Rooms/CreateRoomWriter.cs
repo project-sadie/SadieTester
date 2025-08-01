@@ -4,7 +4,7 @@ namespace SadieTester.Networking.Packets.Writers.Rooms;
 
 public class CreateRoomWriter : NetworkPacketWriter
 {
-    public CreateRoomWriter(CreateRoomData data, int maxUsers = 50)
+    public CreateRoomWriter(CreateRoomData data, int maxUsers = 60)
     {
         WriteShort(ServerPacketIds.PlayerCreateRoom);
         WriteString(data.Name);

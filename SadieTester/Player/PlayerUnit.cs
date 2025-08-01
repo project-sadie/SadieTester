@@ -31,8 +31,14 @@ public class PlayerUnit(
 
     private async void OnReconnect(ReconnectionInfo info)
     {
-        Log.Logger.Warning($"Player reconnected: {info.Type.ToString()}");
-        // playerRepository.PlayerUnits.TryRemove(player.Id, out var _);
+        var type = info.Type.ToString();
+
+        if (type == "Initial")
+        {
+            return;
+        }
+        
+        Log.Logger.Warning($"Player reconnected: {type}");
     }
 
     private async void OnDisconnect(DisconnectionInfo info)
@@ -78,6 +84,7 @@ public class PlayerUnit(
     public PlayerUnitRoomSession? RoomSession { get; set; }
     public DateTime LastCheck { get; set; }
     public DateTime LastPong { get; set; }
+    public DateTime ReceivedNavigatorSearchResults { get; set; }
 
     public async Task WaitForAuthenticationAsync(Action onSuccess, Action onFail)
     {
@@ -100,6 +107,27 @@ public class PlayerUnit(
         }
         
         onSuccess.Invoke();
+    }
+
+    public async Task LoadRandomRoomAsync()
+    {
+        await WaitForNavigatorResultsAsync(
+            TimeSpan.FromSeconds(2));
+        
+        if (NavigatorSearchResults.Count != 0)
+        {
+            var roomId = NavigatorSearchResults
+                .OrderBy(x => x.UsersNow)
+                .First()
+                .Id;
+
+            LoadRoom(roomId);
+            NavigatorSearchResults.Clear();
+        }
+        else
+        {
+            CreateRoom();
+        }
     }
 
     public void LoadRoom(int roomId)
@@ -145,11 +173,11 @@ public class PlayerUnit(
             if (NoRoomTicks >= 2)
             {
                 await WaitForNavigatorResultsAsync(
-                    TimeSpan.FromSeconds(3));
+                    TimeSpan.FromSeconds(2));
 
                 if (NavigatorSearchResults.Count != 0)
                 {
-                    if (SecureRandom.OneIn(8))
+                    if (SecureRandom.OneIn(20))
                     {
                         CreateRoom();
                     }
@@ -164,7 +192,7 @@ public class PlayerUnit(
                         NavigatorSearchResults.Clear();
                     }
                 }
-                else
+                else if (SecureRandom.OneIn(30))
                 {
                     CreateRoom();
                 }
@@ -188,12 +216,7 @@ public class PlayerUnit(
         {
             websocketClient.Send(new RoomUserDanceWriter(GlobalState.Random.Next(1, 4)).GetAllBytes());
         }
-        else if (SecureRandom.OneIn(80))
-        {
-            var randomRoom = GlobalState.Random.Next(1, 9);
-            LoadRoom(randomRoom);
-        }
-        else if (SecureRandom.OneIn(50))
+        else if (SecureRandom.OneIn(70))
         {
             CreateRoom();
         }
@@ -201,11 +224,10 @@ public class PlayerUnit(
         {
             await SayInRoomAsync(RandomHelpers.GetRandomChatMessage());
         }
-        
-        // TODO; Random signs
-        // TODO; Random sitting (:sit)
-        // TODO; Random type :about
-        // Make typing indicators work? 
+        else if ((DateTime.Now - RoomSession.LoadedAt).TotalSeconds > 600)
+        {
+            await LoadRandomRoomAsync();
+        }
     }
 
     private void CreateRoom()
@@ -229,13 +251,10 @@ public class PlayerUnit(
             return;
         }
         
-        Log.Logger.Information("Trying to load navigator search results...");
-        
-        websocketClient.Send(new NavigatorSearchWriter().GetAllBytes());
-        
         var started = DateTime.Now;
-        
-        while (NavigatorSearchResults.Count < 1)
+        websocketClient.Send(new NavigatorSearchWriter().GetAllBytes());
+
+        while (NavigatorSearchResults.Count < 1 && ReceivedNavigatorSearchResults < started)
         {
             if ((DateTime.Now - started).TotalSeconds > timeOut.TotalSeconds)
             {

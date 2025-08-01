@@ -11,6 +11,13 @@ public class RoomLoadedEvent : INetworkPacketEvent
     {
         playerUnit.InRoom = true;
         playerUnit.RoomSession = new PlayerUnitRoomSession();
+        playerUnit.RoomSession.LoadedAt = DateTime.Now;
+
+        Task.Run(async () =>
+        {
+            await Task.Delay(2000);
+            playerUnit.WalkTo(playerUnit.RoomSession.GetRandomPoint());
+        });
         
         return Task.CompletedTask;
     }

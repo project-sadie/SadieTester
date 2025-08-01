@@ -27,7 +27,7 @@ public class RoomHeightMapEvent : INetworkPacketEvent
 
         Task.Run(async () =>
         {
-            await Task.Delay(1800);
+            await Task.Delay(1500);
 
             playerUnit.WalkTo(playerUnit.RoomSession.GetRandomPoint());
             await playerUnit.SayInRoomAsync("I just entered the room!", 6);
