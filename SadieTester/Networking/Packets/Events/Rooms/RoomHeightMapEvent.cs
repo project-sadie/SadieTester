@@ -29,7 +29,7 @@ public class RoomHeightMapEvent : INetworkPacketEvent
         {
             await Task.Delay(1500);
 
-            playerUnit.WalkTo(playerUnit.RoomSession.GetRandomPoint());
+            await playerUnit.WalkToAsync(playerUnit.RoomSession.GetRandomPoint());
             await playerUnit.SayInRoomAsync("I just entered the room!", 6);
         });
         

@@ -7,9 +7,8 @@ namespace SadieTester.Networking.Packets.Events.Rooms;
 [PacketId(EventHandlerIds.RoomCreated)]
 public class RoomCreatedEvent : INetworkPacketEvent
 {
-    public Task HandleAsync(PlayerUnit playerUnit, INetworkPacketReader reader)
+    public async Task HandleAsync(PlayerUnit playerUnit, INetworkPacketReader reader)
     {
-        playerUnit.LoadRoom(reader.ReadInteger());
-        return Task.CompletedTask;
+        await playerUnit.LoadRoomAsync(reader.ReadInteger());
     }
 }

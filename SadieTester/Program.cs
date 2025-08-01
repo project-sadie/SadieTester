@@ -77,9 +77,13 @@ internal static class Program
         AppDomain.CurrentDomain.UnhandledException += UnhandledExceptionTrapper;
         AppDomain.CurrentDomain.ProcessExit += OnClose;
 
-        static async void OnClose(object? sender, EventArgs e)
+        static void OnClose(object? sender, EventArgs e)
         {
-            await _playerRepository.DisposeAsync();
+            _playerRepository?
+                .DisposeAsync()
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
         }
 
         static void UnhandledExceptionTrapper(object sender, UnhandledExceptionEventArgs e)
@@ -138,19 +142,19 @@ internal static class Program
 
             await playerUnit.ConnectAsync();
 
-            if (!playerUnit.TrySendHandshake())
+            if (!await playerUnit.TrySendHandshakeAsync())
             {
                 continue;
             }
 
-            _ = playerUnit.WaitForAuthenticationAsync(() =>
+            _ = playerUnit.WaitForAuthenticationAsync(async void () =>
             {
                 if (!quiet || useKeyConfirm)
                 {
                     Log.Logger.Debug($"Player '{player.Username}' finished loading!");
                 }
                 
-                if (player.Id % 3 == 0) { playerUnit.LoadRoom(GlobalState.Random.Next(1, 9)); }
+                if (player.Id % 3 == 0) { await playerUnit.LoadRoomAsync(GlobalState.Random.Next(1, 9)); }
             }, () =>
             {
                 _playerRepository.PlayerUnits.TryRemove(player.Id, out var _);

@@ -31,7 +31,7 @@ public class PlayerRepository : IAsyncDisposable
         {
             if ((now - player.LastPong).TotalSeconds >= 15)
             {
-                player.Pong();
+                await player.PongAsync();
             }
         }
 

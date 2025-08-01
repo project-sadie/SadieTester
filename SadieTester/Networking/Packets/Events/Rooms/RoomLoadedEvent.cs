@@ -16,7 +16,7 @@ public class RoomLoadedEvent : INetworkPacketEvent
         Task.Run(async () =>
         {
             await Task.Delay(2000);
-            playerUnit.WalkTo(playerUnit.RoomSession.GetRandomPoint());
+            await playerUnit.WalkToAsync(playerUnit.RoomSession.GetRandomPoint());
         });
         
         return Task.CompletedTask;
