@@ -44,28 +44,64 @@ public class PlayerUnit(
         }
     }
 
-    private async void OnReconnect(ReconnectionInfo info)
+    private void OnReconnect(ReconnectionInfo info)
     {
-        var type = info.Type.ToString();
+        _ = HandleReconnectAsync(info);
+    }
 
-        if (type == "Initial")
+    private async Task HandleReconnectAsync(ReconnectionInfo info)
+    {
+        if (info.Type == ReconnectionType.Initial)
         {
             return;
         }
-        
-        Log.Logger.Warning($"Player reconnected: {type}");
+
+        Log.Logger.Warning($"Player reconnected: {info.Type}");
     }
 
-    private async void OnDisconnect(DisconnectionInfo info)
+    private bool IsFatalDisconnect(DisconnectionInfo info)
     {
-        Log.Logger.Error("{Username} disconnected: Type={Type}, CloseStatus={CloseStatus}, CloseDescription={Desc}, Exception={Ex}",
-            player.Username,
-            info.Type,
-            info.CloseStatus,
-            info.CloseStatusDescription ?? "(none)",
-            info.Exception?.ToString() ?? "(no exception)");
-        
-        playerRepository.PlayerUnits.TryRemove(player.Id, out var _);
+        var closeStatus = info.CloseStatus;
+        var ex = info.Exception;
+
+        if (closeStatus != null)
+        {
+            return (int)closeStatus switch
+            {
+                1000 => false,
+                1001 or 1002 or 1003 or 1006 or 1011 => true,
+                _ => (int)closeStatus >= 4000 && (int)closeStatus <= 4999 || true
+            };
+        }
+
+        if (ex == null)
+        {
+            return false;
+        }
+
+        if (ex.Message.Contains("authentication", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return ex.Message.Contains("connection refused", StringComparison.OrdinalIgnoreCase) ||
+               ex.Message.Contains("connection reset", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnDisconnect(DisconnectionInfo info)
+    {
+        if (IsFatalDisconnect(info))
+        {
+            Log.Logger.Error("Fatal disconnect for {Username}: CloseStatus={CloseStatus}, Exception={Ex}",
+                player.Username, info.CloseStatus, info.Exception?.ToString() ?? "(none)");
+
+            playerRepository.PlayerUnits.TryRemove(player.Id, out _);
+        }
+        else
+        {
+            Log.Logger.Warning("Non-fatal disconnect for {Username}: CloseStatus={CloseStatus}",
+                player.Username, info.CloseStatus);
+        }
     }
 
     public IWebsocketClient Client => websocketClient;
@@ -78,7 +114,9 @@ public class PlayerUnit(
             return false;
         }
         
-        var token = player.Tokens.FirstOrDefault();
+        var token = player
+            .Tokens
+            .FirstOrDefault(x => x.UsedAt == null && x.ExpiresAt > DateTime.Now);
         
         if (token == null)
         {
@@ -92,15 +130,12 @@ public class PlayerUnit(
         return true;
     }
 
-    private Task OnMessageReceived(ResponseMessage message)
+    private async Task OnMessageReceived(ResponseMessage message)
     {
-        return Task.Run(async () =>
+        foreach (var packet in DecodePacketsFromBytes(message.Binary))
         {
-            foreach (var packet in DecodePacketsFromBytes(message.Binary))
-            {
-                await packetHandler.HandleAsync(this, packet);
-            }
-        });
+            await packetHandler.HandleAsync(this, packet);
+        }
     }
 
     public bool HasAuthenticated { get; set; }
