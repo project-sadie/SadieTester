@@ -4,7 +4,7 @@ namespace SadieTester;
 
 public static class SecureRandom
 {
-    private static int Next(int minValue, int maxValue)
+    public static int Next(int minValue, int maxValue)
     {
         return RandomNumberGenerator.GetInt32(minValue, maxValue);
     }

@@ -1,5 +1,6 @@
 using System.Drawing;
 using SadieTester.Rooms;
+using Serilog;
 
 namespace SadieTester.Player;
 
@@ -15,12 +16,13 @@ public class PlayerUnitRoomSession
 
     public Point GetRandomPoint()
     {
-        var randomX = GlobalState.Random.Next(1, MapSizeX);
-        var randomY = GlobalState.Random.Next(1, MapSizeY);
+        var randomX = GlobalState.Random.Next(0, MapSizeX - 1);
+        var randomY = GlobalState.Random.Next(0, MapSizeY - 1);
 
-        if (!string.IsNullOrEmpty(RelativeHeightMap) && RelativeHeightMap.Split("\r")[randomY - 1][randomX - 1].ToString().ToLower() == "x")
+        if (!string.IsNullOrEmpty(RelativeHeightMap) && 
+            RelativeHeightMap.Split("\r")[randomY][randomX].ToString().ToLower() == "x")
         {
-            Console.WriteLine("walking to a closed tile lol");
+            Log.Logger.Error("Movement algorithm picked non walkable tile");
         }
         
         return new Point(randomX, randomY);
