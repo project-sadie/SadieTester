@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Drawing;
 using Bogus;
 using SadieTester.Networking.Packets;
@@ -19,14 +20,23 @@ public class PlayerUnit(
     public async Task ConnectAsync()
     {
         websocketClient.ReconnectTimeout = TimeSpan.FromSeconds(120);
-        websocketClient.MessageReceived.Subscribe(message => OnMessageReceived(message).ConfigureAwait(false));
+        
+        websocketClient.MessageReceived.Subscribe(async message => 
+        {
+            try
+            {
+                await OnMessageReceived(message);
+            }
+            catch (Exception ex)
+            {
+                Log.Logger.Error(ex, "Unhandled exception in message received");
+            }
+        });
+        
         websocketClient.DisconnectionHappened.Subscribe(OnDisconnect);
         websocketClient.ReconnectionHappened.Subscribe(OnReconnect);
         
-        await Task.Run(() =>
-        {
-            websocketClient.Start();
-        });
+        await websocketClient.Start();
     }
     
     private readonly SemaphoreSlim _sendLock = new(1, 1);
@@ -56,7 +66,7 @@ public class PlayerUnit(
             return;
         }
 
-        Log.Logger.Warning($"Player reconnected: {info.Type}");
+        // Log.Logger.Warning($"Player reconnected: {info.Type}");
     }
 
     private bool IsFatalDisconnect(DisconnectionInfo info)
@@ -99,8 +109,7 @@ public class PlayerUnit(
         }
         else
         {
-            Log.Logger.Warning("Non-fatal disconnect for {Username}: CloseStatus={CloseStatus}",
-                player.Username, info.CloseStatus);
+            //Log.Logger.Information("Non-fatal disconnect for {Username}: CloseStatus={CloseStatus}", player.Username, info.CloseStatus);
         }
     }
 
@@ -132,9 +141,16 @@ public class PlayerUnit(
 
     private async Task OnMessageReceived(ResponseMessage message)
     {
-        foreach (var packet in DecodePacketsFromBytes(message.Binary))
+        try
         {
-            await packetHandler.HandleAsync(this, packet);
+            foreach (var packet in DecodePacketsFromBytes(message.Binary))
+            {
+                await packetHandler.HandleAsync(this, packet);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Logger.Error(ex, "Error processing incoming packets for player {Username}", player.Username);
         }
     }
 
@@ -151,7 +167,7 @@ public class PlayerUnit(
         
         while (!HasAuthenticated)
         {
-            if ((DateTime.Now - started).TotalSeconds > 15)
+            if ((DateTime.Now - started).TotalSeconds > 12)
             {
                 onFail.Invoke();
                 return;
@@ -175,17 +191,18 @@ public class PlayerUnit(
         
         if (NavigatorSearchResults.Count != 0)
         {
-            var roomId = NavigatorSearchResults
+            var snapshot = NavigatorSearchResults.ToList();
+            var roomId = snapshot
                 .OrderBy(x => x.UsersNow)
                 .First()
                 .Id;
 
             await LoadRoomAsync(roomId);
-            NavigatorSearchResults.Clear();
+            NavigatorSearchResults = new ConcurrentBag<NavigatorSearchRoomResult>();
         }
-        else
+        else if (SecureRandom.OneIn(95))
         {
-            await CreateRoomAsync();
+            await CreateRoomAsync("NO_NAV_RESULTS");
         }
     }
 
@@ -199,11 +216,18 @@ public class PlayerUnit(
     {
         _ = Task.Run(async () =>
         {
-            await SafeSendAsync(new RoomUserStartTypingWriter().GetAllBytes());
-            await Task.Delay(message.Length * 90);
-            await SafeSendAsync(new RoomUserChat(message, bubble).GetAllBytes());
-            await Task.Delay(100);
-            await SafeSendAsync(new RoomUserStopTypingWriter().GetAllBytes());
+            try
+            {
+                await SafeSendAsync(new RoomUserStartTypingWriter().GetAllBytes());
+                await Task.Delay(message.Length * 95);
+                await SafeSendAsync(new RoomUserChat(message, bubble).GetAllBytes());
+                await Task.Delay(50);
+                await SafeSendAsync(new RoomUserStopTypingWriter().GetAllBytes());
+            }
+            catch (Exception ex)
+            {
+                Log.Logger.Error(ex.ToString());
+            }
         });
     }
 
@@ -236,24 +260,22 @@ public class PlayerUnit(
 
                 if (NavigatorSearchResults.Count != 0)
                 {
-                    if (SecureRandom.OneIn(20))
+                    if (SecureRandom.OneIn(500))
                     {
-                        await CreateRoomAsync();
+                        await CreateRoomAsync("ONE_IN_500_CHANCE");
                     }
                     else
                     {
-                        var roomId = NavigatorSearchResults
-                            .OrderBy(x => x.UsersNow)
-                            .First()
-                            .Id;
+                        var snapshot = NavigatorSearchResults.ToList();
+                        var roomId = snapshot.OrderBy(x => x.UsersNow).First().Id;
 
                         await LoadRoomAsync(roomId);
-                        NavigatorSearchResults.Clear();
+                        NavigatorSearchResults = [];
                     }
                 }
-                else if (SecureRandom.OneIn(30))
+                else if (SecureRandom.OneIn(400))
                 {
-                    await CreateRoomAsync();
+                    await CreateRoomAsync("ONE_IN_400_CHANCE_BACKUP");
                 }
             }
             
@@ -271,13 +293,33 @@ public class PlayerUnit(
         {
             await LookToPointAsync(RoomSession.GetRandomUser(player.Id).Position);
         }
-        else if (SecureRandom.OneIn(60))
+        else if (SecureRandom.OneIn(80))
         {
             await SafeSendAsync(new RoomUserDanceWriter(GlobalState.Random.Next(1, 4)).GetAllBytes());
         }
-        else if (SecureRandom.OneIn(70))
+        else if (SecureRandom.OneIn(80))
         {
-            await CreateRoomAsync();
+            await SayInRoomAsync(":sit");
+        }
+        else if (SecureRandom.OneIn(185))
+        {
+            await SayInRoomAsync(":about");
+        }
+        else if (SecureRandom.OneIn(90))
+        {
+            await SayInRoomAsync(":commands");
+        }
+        else if (SecureRandom.OneIn(105))
+        {
+            await SayInRoomAsync(":shutdown");
+        }
+        else if (SecureRandom.OneIn(105))
+        {
+            await SayInRoomAsync($":enable {SecureRandom.Next(1, 60)}");
+        }
+        else if (SecureRandom.OneIn(1000))
+        {
+            await CreateRoomAsync("1_IN_1000_CHANCE");
         }
         else if (SecureRandom.OneIn(5))
         {
@@ -289,7 +331,7 @@ public class PlayerUnit(
         }
     }
 
-    private async Task CreateRoomAsync()
+    private async Task CreateRoomAsync(string reason)
     {
         var faker = new Faker<CreateRoomData>()
             .RuleFor(u => u.Name, f => f.Address.StreetAddress())
@@ -298,10 +340,11 @@ public class PlayerUnit(
 
         var data = faker.Generate();
         
+        Log.Logger.Warning($"Creating room '{data.Name}': {reason} for {player.Username}");
         await SafeSendAsync(new CreateRoomWriter(data).GetAllBytes());
     }
 
-    public List<NavigatorSearchRoomResult> NavigatorSearchResults = [];
+    public ConcurrentBag<NavigatorSearchRoomResult> NavigatorSearchResults = new();
     
     private async Task WaitForNavigatorResultsAsync(TimeSpan timeOut)
     {
@@ -313,7 +356,7 @@ public class PlayerUnit(
         var started = DateTime.Now;
         await SafeSendAsync(new NavigatorSearchWriter().GetAllBytes());
 
-        while (NavigatorSearchResults.Count < 1 && ReceivedNavigatorSearchResults < started)
+        while (NavigatorSearchResults.IsEmpty)
         {
             if ((DateTime.Now - started).TotalSeconds > timeOut.TotalSeconds)
             {
@@ -339,10 +382,14 @@ public class PlayerUnit(
         {
             websocketClient.Dispose();
         }
+        
+        _sendLock.Dispose();
     }
 
     public async Task PongAsync()
     {
         await SafeSendAsync(new PlayerPongWriter().GetAllBytes());
     }
+
+    public long Id => player.Id;
 }

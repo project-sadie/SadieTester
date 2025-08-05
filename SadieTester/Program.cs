@@ -1,7 +1,9 @@
 ﻿using System.Diagnostics;
+using System.Net.Sockets;
+using System.Text;
+using System.Text.Json;
 using AutoMapper;
 using CommandLine;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -36,12 +38,12 @@ internal static class Program
     
     public static async Task Main(string[] args)
     {
-        var maxPlayerCount = 0;
-        var useKeyConfirm = true;
-        var sleepTime = 950;
+        var maxPlayerCount = 5_000;
+        var useKeyConfirm = false;
+        var sleepTime = 50;
         var confirmLaunch = true;
         var quiet = false;
-        var maxLoadingPlayers = 4;
+        var maxLoadingPlayers = 6;
         
         Parser.Default.ParseArguments<Options>(args)
             .WithParsed(o =>
@@ -99,7 +101,7 @@ internal static class Program
                 configurationBuilder.AddJsonFile("appsettings.json", optional: false);
             })
             .ConfigureServices((context, collection) => ServiceCollection.AddServices(collection, context.Configuration))
-            .UseSerilog((hostContext, _, logger) => logger.WriteTo.Console().MinimumLevel.Verbose().MinimumLevel.Override("Microsoft", LogEventLevel.Warning))
+            .UseSerilog((hostContext, _, logger) => logger.WriteTo.Console(theme: CustomTheme.WithBackgrounds()).MinimumLevel.Verbose().MinimumLevel.Override("Microsoft", LogEventLevel.Warning))
             .Build();
 
         var services = host.Services;
@@ -151,10 +153,13 @@ internal static class Program
             {
                 if (!quiet || useKeyConfirm)
                 {
-                    Log.Logger.Debug($"Player '{player.Username}' finished loading!");
+                    var players = _playerRepository.PlayerUnits.Count;
+                    
+                    if (players % 4 == 0)
+                    {
+                        Log.Logger.Debug($"{players} players have been loaded!");
+                    }
                 }
-                
-                if (player.Id % 3 == 0) { await playerUnit.LoadRoomAsync(GlobalState.Random.Next(1, 9)); }
             }, () =>
             {
                 _playerRepository.PlayerUnits.TryRemove(player.Id, out var _);
@@ -187,14 +192,33 @@ internal static class Program
 
         async Task<Sadie.Db.Models.Players.Player?> GetPlayerAsync(SadieDbContext dbContext, ICollection<long> excludedIds)
         {
-            return await dbContext
-                .Players
-                .Where(x => x.Tokens.Any(x => x.UsedAt == null))
-                .Include(x => x.Tokens)
-                .Include(x => x.Data)
-                .Where(x => x.Username.EndsWith("_bot") && !x.Data.IsOnline && !excludedIds.Contains(x.Id))
-                .OrderByDescending(x => x.Id)
-                .FirstOrDefaultAsync();
+            var sw = Stopwatch.StartNew();
+
+            try
+            {
+                using var client = new TcpClient("127.0.0.1", 5555);
+                await using var stream = client.GetStream();
+                var requestMessage = Encoding.UTF8.GetBytes("Requesting Player Data");
+                await stream.WriteAsync(requestMessage, 0, requestMessage.Length);
+            
+                var buffer = new byte[1024];  // Buffer to hold the response
+                var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+                var response = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+
+                var player = JsonSerializer.Deserialize<Sadie.Db.Models.Players.Player>(response);
+
+                if (sw.Elapsed.TotalSeconds > 5)
+                {
+                    Log.Logger.Warning($"Took {sw.Elapsed.TotalSeconds} seconds to retrieve a player from the server :(");
+                }
+
+                return player;
+            }
+            catch (Exception ex)
+            {
+                Log.Logger.Error($"An error occurred while retrieving player data: {ex}");
+                return null;
+            }
         }
     }
 
@@ -202,13 +226,13 @@ internal static class Program
     {
         var sw = Stopwatch.StartNew();
         
-        Log.Logger.Warning($"There are more than {i} players waiting to be loaded, waiting till there is less...");
+        Log.Logger.Debug($"There are more than {i} players waiting to be loaded, waiting till there is less...");
         
         while (_playerRepository!.PlayerUnits.Values.Count(x => !x.HasAuthenticated) >= i)
         {
-            await Task.Delay(1000);
+            await Task.Delay(200);
         }
         
-        Log.Logger.Warning($"Finished waiting, {Math.Round(sw.Elapsed.TotalSeconds, 3)}s");
+        Log.Logger.Information($"Finished waiting, {Math.Round(sw.Elapsed.TotalSeconds, 3)}s");
     }
 }

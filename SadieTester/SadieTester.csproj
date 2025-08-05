@@ -15,7 +15,7 @@
       <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.7" />
       <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.7" />
       <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0-rc.1.efcore.9.0.0" />
-      <PackageReference Include="Sadie.Db" Version="1.7.9" />
+      <PackageReference Include="Sadie.Db" Version="1.8.6" />
       <PackageReference Include="Scrutor" Version="4.2.2" />
       <PackageReference Include="SecureRandom" Version="1.0.1" />
       <PackageReference Include="Serilog" Version="4.0.0-dev-02122" />

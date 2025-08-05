@@ -10,7 +10,7 @@ public class NavigatorSearchResultsEvent : INetworkPacketEvent
 {
     public Task HandleAsync(PlayerUnit playerUnit, INetworkPacketReader reader)
     {
-        playerUnit.NavigatorSearchResults.Clear();
+        playerUnit.NavigatorSearchResults = [];
         
         reader.ReadString();
         reader.ReadString();
