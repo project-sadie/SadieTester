@@ -42,6 +42,20 @@ internal static class Program
     
     public static async Task Main(string[] args)
     {
+        if (args.Length == 0)
+        {
+            Console.WriteLine("You must provide at least one option. Use --help to see available options.");
+            return;
+        }
+        
+        var result = Parser.Default.ParseArguments<Options>(args);
+
+        if (result.Tag == ParserResultType.NotParsed &&
+            result.Errors.Any(e => e is HelpRequestedError or VersionRequestedError))
+        {
+            return;
+        }
+        
         var maxPlayerCount = 20_000;
         var useKeyConfirm = false;
         var sleepTime = 500;
