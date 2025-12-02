@@ -7,7 +7,7 @@ using SadieTester.Rooms;
 namespace SadieTester.Networking.Packets.Events.Rooms.Users;
 
 [PacketId(EventHandlerIds.RoomUserStatus)]
-public class RoomUserStatusWriter : INetworkPacketEvent
+public class RoomUserStatusEvent : INetworkPacketEvent
 {
     public Task HandleAsync(PlayerUnit playerUnit, INetworkPacketReader reader)
     {
@@ -31,7 +31,7 @@ public class RoomUserStatusWriter : INetworkPacketEvent
             var user = playerUnit
                 .RoomSession
                 .Users
-                .FirstOrDefault(x => x.Id == id);
+                .FirstOrDefault(x => x != null && x.Id == id );
 
             if (user == null)
             {
@@ -55,10 +55,11 @@ public class RoomUserStatusWriter : INetworkPacketEvent
                 
             var statusParts = statusString.Substring(1).Split("/");
 
-            user.StatusMap = [];
-                
-            user.StatusMap = statusParts.ToDictionary(
-                k => k.Split(" ")[0], v => v.Split(" ")[1]);
+            user.StatusMap = statusParts
+                .GroupBy(p => p.Split(' ')[0])
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.First().Split(' ')[1]);
         }
         
         return Task.CompletedTask;

@@ -9,5 +9,6 @@ public class ClientPingEvent : INetworkPacketEvent
 {
     public async Task HandleAsync(PlayerUnit playerUnit, INetworkPacketReader reader)
     {
+        await playerUnit.SafeSendAsync(new PlayerPongWriter().GetAllBytes());
     }
 }

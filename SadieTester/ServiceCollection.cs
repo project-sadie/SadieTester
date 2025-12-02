@@ -4,6 +4,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using RabbitMQ.Client;
 using Sadie.Db;
 using SadieTester.Database.Mappers;
 using SadieTester.Networking.Attributes;
@@ -21,11 +22,39 @@ public static class ServiceCollection
         var useWss = config.GetValue<bool>("Networking:UseWss");
         
         serviceCollection.AddSingleton<PlayerRepository>();
-        serviceCollection.AddTransient<WebsocketClient>(provider => new WebsocketClient(new Uri($"{(useWss ? "wss":"ws")}://{host}"), () => new ClientWebSocket
+        serviceCollection.AddTransient<WebsocketClient>(provider =>
         {
-        }));
-        serviceCollection.AddTransient<PlayerUnit>();
+            var url = new Uri($"{(useWss ? "wss" : "ws")}://{host}");
 
+            Func<ClientWebSocket> factory = () =>
+            {
+                var ws = new ClientWebSocket();
+
+                ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(60);;
+
+                return ws;
+            };
+
+            var client = new WebsocketClient(url, factory)
+            {
+                IsReconnectionEnabled = true,
+                ErrorReconnectTimeout = TimeSpan.FromSeconds(60)
+            };
+
+            client.ReconnectTimeout = TimeSpan.FromDays(365);
+
+            return client;
+        });
+
+        
+        serviceCollection.AddSingleton<IConnectionFactory, ConnectionFactory>(provider => new ConnectionFactory
+        {
+            Uri = new Uri(config.GetConnectionString("RabbitMq"))
+        });
+
+        serviceCollection.AddSingleton<MessageQueueWrapper>();
+
+        
         serviceCollection.Scan(scan => scan
             .FromAssemblyOf<INetworkPacketEvent>()
             .AddClasses(classes => classes.AssignableTo<INetworkPacketEvent>())

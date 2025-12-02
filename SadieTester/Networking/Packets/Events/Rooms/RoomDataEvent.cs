@@ -10,7 +10,7 @@ public class RoomDataEvent : INetworkPacketEvent
 {
     public Task HandleAsync(PlayerUnit playerUnit, INetworkPacketReader reader)
     {
-        playerUnit.Client.Send(new RoomHeightMapWriter().GetAllBytes());
+        playerUnit.SafeSendAsync(new RoomHeightMapWriter().GetAllBytes());
         return Task.CompletedTask;
     }
 }

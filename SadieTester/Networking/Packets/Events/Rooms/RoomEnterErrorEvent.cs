@@ -13,7 +13,14 @@ public class RoomEnterErrorEvent : INetworkPacketEvent
 
         if (errorCode == 1)
         {
-            await playerUnit.LoadRoomAsync(GlobalState.Random.Next(1, 9));
+            if (SecureRandom.OneIn(4))
+            {
+                await playerUnit.CreateRoomAsync();
+            }
+            else
+            {
+                playerUnit.NoRoomTicks = 3;
+            }
         }
     }
 }
