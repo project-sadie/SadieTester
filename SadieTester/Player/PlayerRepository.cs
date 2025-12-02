@@ -1,63 +1,46 @@
 using System.Collections.Concurrent;
-using Serilog;
+using SadieTester.Helpers;
 
 namespace SadieTester.Player;
 
 public class PlayerRepository : IAsyncDisposable
 {
-    public ConcurrentDictionary<long, PlayerUnit> PlayerUnits { get; } = [];
-    
-    public async Task WorkAsync(CancellationToken token)
-    {
-        while (!token.IsCancellationRequested)
-        {
-            var loopStart = DateTime.UtcNow;
-            
-            try
-            {
-                await RunPeriodicChecksAsync();
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e);
-            }
-            
-            var elapsed = DateTime.UtcNow - loopStart;
+    public ConcurrentDictionary<long, PlayerUnit> PlayerUnits { get; } = new();
 
-            if (elapsed > TimeSpan.FromSeconds(1))
-            {
-                Log.Logger.Warning("[WARN] RunPeriodicChecksAsync took too long: {Elapsed:N0} ms", elapsed.TotalMilliseconds);
-            }
-            else
-            {
-                await Task.Delay(1000, token);
-            }
-        }
+    public async Task AddPlayerAsync(long id, PlayerUnit unit, CancellationToken token)
+    {
+        if (!PlayerUnits.TryAdd(id, unit))
+            throw new Exception($"Player {id} already exists.");
+
+        // Start its autonomous async loop
+        _ = Task.Run(() => RunPlayerLoopAsync(unit, token), token);
     }
-    
-    private async Task RunPeriodicChecksAsync()
+
+    private async Task RunPlayerLoopAsync(PlayerUnit player, CancellationToken token)
     {
-        var now = DateTime.UtcNow;
-
-        await Parallel.ForEachAsync(PlayerUnits.Values, new ParallelOptions { MaxDegreeOfParallelism = 100 }, async (player, ct) =>
+        try
         {
-            try
+            while (!token.IsCancellationRequested)
             {
-                if ((now - player.LastPong).TotalSeconds >= 10)
-                {
-                    await player.PongAsync();
-                }
+                var now = DateTime.UtcNow;
 
-                if ((now - player.LastCheck).TotalSeconds >= 5)
+                if (now - player.LastCheck >= TimeSpan.FromSeconds(10))
                 {
                     await player.RunPeriodicChecksAsync();
+                    player.LastCheck = now;
                 }
+
+                await Task.Delay(50, token);
             }
-            catch (Exception e)
-            {
-                Log.Logger.Error(e.ToString());
-            }
-        });
+        }
+        catch (OperationCanceledException)
+        {
+            // normal shutdown
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Player loop error: {ex}");
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -66,5 +49,7 @@ public class PlayerRepository : IAsyncDisposable
         {
             await player.DisposeAsync();
         }
+
+        PlayerUnits.Clear();
     }
 }

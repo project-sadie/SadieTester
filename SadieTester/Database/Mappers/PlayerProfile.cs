@@ -10,7 +10,7 @@ public class PlayerProfile : Profile
 {
     public PlayerProfile(IServiceProvider provider, PlayerRepository playerRepository)
     {
-        CreateMap<Sadie.Db.Models.Players.Player, PlayerUnit>()
+        CreateMap<PlayerTrimmedDown, PlayerUnit>()
             .ConstructUsing(x => new PlayerUnit(x,
                 provider.GetRequiredService<WebsocketClient>(),
                 provider.GetRequiredService<INetworkPacketHandler>(),

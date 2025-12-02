@@ -1,38 +1,60 @@
 ﻿using System.Buffers.Binary;
+using System.Collections.Concurrent;
 
 namespace SadieTester.Networking.Packets;
 
 public class NetworkPacketDecoder
 {
-    protected List<NetworkPacket> DecodePacketsFromBytes(byte[] packet)
+    private readonly MemoryStream _buffer = new MemoryStream();
+
+    public List<NetworkPacket> Feed(byte[] frameData)
     {
-        if (packet.Length < 4 || packet.Length > 4024 - 4)
-        {
-            return new List<NetworkPacket>();
-        }
+        _buffer.Position = _buffer.Length; 
+        _buffer.Write(frameData);
 
-        using var reader = new BinaryReader(new MemoryStream(packet));
-        var packetLength = BinaryPrimitives.ReadInt32BigEndian(reader.ReadBytes(4));
-
-        var packetData = reader.ReadBytes(packetLength);
-
-        using var br2 = new BinaryReader(new MemoryStream(packetData));
-        var packetId = BinaryPrimitives.ReadInt16BigEndian(br2.ReadBytes(2));
-
-        var content = new byte[packetData.Length - 2];
-        Buffer.BlockCopy(packetData, 2, content, 0, packetData.Length - 2);
+        _buffer.Position = 0;
 
         var packets = new List<NetworkPacket>();
-        
-        if (reader.BaseStream.Length - 4 > packetLength)
-        {
-            var extra = new byte[reader.BaseStream.Length - reader.BaseStream.Position];
-            Buffer.BlockCopy(packet, (int)reader.BaseStream.Position, extra, 0, (int)(reader.BaseStream.Length - reader.BaseStream.Position));
 
-            packets.AddRange(DecodePacketsFromBytes(extra));
+        while (true)
+        {
+            if (_buffer.Length - _buffer.Position < 4)
+                break;
+
+            span: 
+            Span<byte> lengthSpan = stackalloc byte[4];
+            _buffer.Read(lengthSpan);
+            int packetLength = BinaryPrimitives.ReadInt32BigEndian(lengthSpan);
+
+            if (_buffer.Length - _buffer.Position < packetLength)
+            {
+                // not enough data yet, rewind
+                _buffer.Position -= 4;
+                break;
+            }
+
+            // full packet is available
+            byte[] payload = new byte[packetLength];
+            _buffer.Read(payload);
+
+            short packetId = BinaryPrimitives.ReadInt16BigEndian(payload.AsSpan()[..2]);
+            byte[] body = payload.AsSpan()[2..].ToArray();
+
+            packets.Add(new NetworkPacket(packetId, body));
         }
-        
-        packets.Add(new NetworkPacket(packetId, content));
+
+        // compact remaining data
+        long remaining = _buffer.Length - _buffer.Position;
+        if (remaining > 0)
+        {
+            byte[] leftover = new byte[remaining];
+            _buffer.Read(leftover);
+
+            _buffer.SetLength(0);
+            _buffer.Write(leftover);
+        }
+        else _buffer.SetLength(0);
+
         return packets;
     }
 }
