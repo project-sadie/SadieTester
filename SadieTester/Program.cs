@@ -2,6 +2,7 @@
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AutoMapper;
 using CommandLine;
 using Microsoft.Extensions.Configuration;
@@ -32,16 +33,20 @@ internal static class Program
         
         [Option('q', "quiet", Required = false, HelpText = "Makes things a little quieter")]
         public bool Quiet { get; set; }
+        
+        [Option('r', "ramp", Required = false, HelpText = "Enable endless ramp-up mode.")]
+        public bool RampUp { get; set; }
     }
     
     private static PlayerRepository? _playerRepository;
     
     public static async Task Main(string[] args)
     {
-        var maxPlayerCount = 5_000;
+        var maxPlayerCount = 20_000;
         var useKeyConfirm = false;
-        var sleepTime = 50;
-        var confirmLaunch = true;
+        var sleepTime = 500;
+        var confirmLaunch = false;
+        var useRampUp = false;
         var quiet = false;
         var maxLoadingPlayers = 6;
         
@@ -60,7 +65,7 @@ internal static class Program
                     useKeyConfirm = true;
                 }
                 
-                if (o.SleepBetweenPlayers != 0 && o.SleepBetweenPlayers >= 600)
+                if (o.SleepBetweenPlayers > 0)
                 {
                     sleepTime = o.SleepBetweenPlayers;
                 }
@@ -73,6 +78,11 @@ internal static class Program
                 if (o.Quiet)
                 {
                     quiet = true;
+                }
+
+                if (o.RampUp)
+                {
+                    useRampUp = true;
                 }
             });
         
@@ -106,10 +116,8 @@ internal static class Program
 
         var services = host.Services;
         var mapper = services.GetRequiredService<IMapper>();
-        var dbContext = services.GetRequiredService<SadieDbContext>();
 
         _playerRepository = services.GetRequiredService<PlayerRepository>();
-        _ = _playerRepository.WorkAsync(CancellationToken.None);
 
         if (confirmLaunch)
         {
@@ -122,23 +130,28 @@ internal static class Program
         
         while (maxPlayerCount == 0 || loaded < maxPlayerCount)
         {
-            loaded++;
-
-            Console.Title = $"{loaded:N0} players loaded";
-            
-            var player = await GetPlayerAsync(dbContext, excludedIds);
+            var player = await GetPlayerAsync(services.GetRequiredService<MessageQueueWrapper>());
 
             if (player == null)
             {
-                Log.Logger.Warning("Ran out of player records to load");
-                break;
-            }
-
-            var playerUnit = mapper.Map<PlayerUnit>(player);
-            if (!_playerRepository.PlayerUnits.TryAdd(player.Id, playerUnit))
-            {
+                Log.Logger.Warning("Failed to fetch a player, sleeping before retrying");
+                await Task.Delay(TimeSpan.FromSeconds(10));
                 continue;
             }
+
+            loaded++;
+
+            if (loaded % 10 == 0)
+            {
+                Console.Title = $"{loaded:N0} players loaded";
+            }
+            
+            var playerUnit = mapper.Map<PlayerUnit>(player);
+            
+            playerUnit.LastCheck = DateTime.Now.AddMilliseconds(Random.Shared.Next(-2000, 2000));
+            playerUnit.LastPong  = DateTime.Now.AddMilliseconds(Random.Shared.Next(-4000, 4000));
+            
+            await _playerRepository.AddPlayerAsync(player.Id, playerUnit, CancellationToken.None);
 
             excludedIds.Add(player.Id);
 
@@ -146,25 +159,22 @@ internal static class Program
 
             if (!await playerUnit.TrySendHandshakeAsync())
             {
+                Log.Logger.Error("Cant send handshake");
                 continue;
             }
 
-            _ = playerUnit.WaitForAuthenticationAsync(async void () =>
-            {
-                if (!quiet || useKeyConfirm)
+            _ = playerUnit.WaitForAuthenticationAsync(
+                onSuccess: async () =>
                 {
-                    var players = _playerRepository.PlayerUnits.Count;
-                    
-                    if (players % 4 == 0)
-                    {
-                        Log.Logger.Debug($"{players} players have been loaded!");
-                    }
-                }
-            }, () =>
-            {
-                _playerRepository.PlayerUnits.TryRemove(player.Id, out var _);
-                Log.Logger.Error($"Failed to load player '{player.Username}', WaitForAuthentication timeout");
-            });
+                    var pCount = _playerRepository.PlayerUnits.Count;
+                    if (pCount % 5 == 0)
+                        Log.Logger.Information($"{pCount:N0} players have been loaded");
+                },
+                onTimeout: () =>
+                {
+                    _playerRepository.PlayerUnits.TryRemove(player.Id, out _);
+                    Log.Logger.Error($"Failed to load player '{player.Username}', WaitForAuthentication timeout");
+                });
 
             if (loaded > maxLoadingPlayers && _playerRepository.PlayerUnits.Values.Count(x => !x.HasAuthenticated) > maxLoadingPlayers)
             {
@@ -174,6 +184,13 @@ internal static class Program
             if (useKeyConfirm)
             {
                 Console.ReadKey(true);
+            }
+            else if (useRampUp)
+            {
+                const int limit = 950;
+                
+                var deduct = (loaded * 2) < limit ? (loaded * 2) : limit;
+                await Task.Delay(1_000 - deduct);
             }
             else
             {
@@ -190,24 +207,23 @@ internal static class Program
 
         return;
 
-        async Task<Sadie.Db.Models.Players.Player?> GetPlayerAsync(SadieDbContext dbContext, ICollection<long> excludedIds)
+        async Task<PlayerTrimmedDown?> GetPlayerAsync(MessageQueueWrapper mq)
         {
             var sw = Stopwatch.StartNew();
 
             try
             {
-                using var client = new TcpClient("127.0.0.1", 5555);
-                await using var stream = client.GetStream();
-                var requestMessage = Encoding.UTF8.GetBytes("Requesting Player Data");
-                await stream.WriteAsync(requestMessage, 0, requestMessage.Length);
-            
-                var buffer = new byte[1024];  // Buffer to hold the response
-                var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
-                var response = Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                var item = mq.BasicGet("players");
+                
+                if (item == null)
+                {
+                    return null;
+                }
+                
+                var message = Encoding.Default.GetString(item.Body.ToArray());
+                var player = JsonSerializer.Deserialize<PlayerTrimmedDown>(message, PlayerJsonOptions);
 
-                var player = JsonSerializer.Deserialize<Sadie.Db.Models.Players.Player>(response);
-
-                if (sw.Elapsed.TotalSeconds > 5)
+                if (sw.Elapsed.TotalSeconds > 3)
                 {
                     Log.Logger.Warning($"Took {sw.Elapsed.TotalSeconds} seconds to retrieve a player from the server :(");
                 }
@@ -221,18 +237,28 @@ internal static class Program
             }
         }
     }
+    
+    private static readonly JsonSerializerOptions PlayerJsonOptions = new()
+    {
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Skip
+    };
 
-    private static async Task WaitForLessThanLoading(int i)
+    private static async Task WaitForLessThanLoading(int maxLoading)
     {
         var sw = Stopwatch.StartNew();
-        
-        Log.Logger.Debug($"There are more than {i} players waiting to be loaded, waiting till there is less...");
-        
-        while (_playerRepository!.PlayerUnits.Values.Count(x => !x.HasAuthenticated) >= i)
+        var timeout = TimeSpan.FromSeconds(30);
+
+        while (_playerRepository!.PlayerUnits.Values.Count(x => !x.HasAuthenticated) >= maxLoading)
         {
-            await Task.Delay(200);
+            if (sw.Elapsed > timeout)
+            {
+                Log.Warning("Loading wait timeout; forcing continuation");
+                break;
+            }
+
+            await Task.Delay(150);
         }
-        
-        Log.Logger.Information($"Finished waiting, {Math.Round(sw.Elapsed.TotalSeconds, 3)}s");
+
+        Log.Logger.Debug($"Waited {sw.Elapsed.TotalSeconds:F2}s for loading to drop.");
     }
 }
