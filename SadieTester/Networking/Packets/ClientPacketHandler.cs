@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using SadieTester.Networking.Packets.Events;
+﻿using SadieTester.Networking.Packets.Events;
 using SadieTester.Player;
 using Serilog;
 

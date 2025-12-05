@@ -1,11 +1,10 @@
 ﻿using System.Buffers.Binary;
-using System.Collections.Concurrent;
 
 namespace SadieTester.Networking.Packets;
 
 public class NetworkPacketDecoder
 {
-    private readonly MemoryStream _buffer = new MemoryStream();
+    private readonly MemoryStream _buffer = new();
 
     public List<NetworkPacket> Feed(byte[] frameData)
     {

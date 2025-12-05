@@ -2,8 +2,6 @@ using System.Net.WebSockets;
 using System.Reflection;
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using RabbitMQ.Client;
 using Sadie.Db;
 using SadieTester.Database.Mappers;

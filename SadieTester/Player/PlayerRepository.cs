@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using SadieTester.Helpers;
 
 namespace SadieTester.Player;
 
@@ -10,13 +9,14 @@ public class PlayerRepository : IAsyncDisposable
     public async Task AddPlayerAsync(long id, PlayerUnit unit, CancellationToken token)
     {
         if (!PlayerUnits.TryAdd(id, unit))
+        {
             throw new Exception($"Player {id} already exists.");
+        }
 
-        // Start its autonomous async loop
         _ = Task.Run(() => RunPlayerLoopAsync(unit, token), token);
     }
 
-    private async Task RunPlayerLoopAsync(PlayerUnit player, CancellationToken token)
+    private static async Task RunPlayerLoopAsync(PlayerUnit player, CancellationToken token)
     {
         try
         {
@@ -24,7 +24,7 @@ public class PlayerRepository : IAsyncDisposable
             {
                 var now = DateTime.UtcNow;
 
-                if (now - player.LastCheck >= TimeSpan.FromSeconds(10))
+                if (now - player.LastCheck >= TimeSpan.FromSeconds(player.NoRoomTicks > 0 ? 6 : 9))
                 {
                     await player.RunPeriodicChecksAsync();
                     player.LastCheck = now;

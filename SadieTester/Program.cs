@@ -1,14 +1,9 @@
 ﻿using System.Diagnostics;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using AutoMapper;
 using CommandLine;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Sadie.Db;
 using SadieTester.Player;
 using Serilog;
 using Serilog.Events;
@@ -62,7 +57,9 @@ internal static class Program
         var confirmLaunch = false;
         var useRampUp = false;
         var quiet = false;
-        var maxLoadingPlayers = 6;
+        
+        const int rampLevel = 4;
+        const int maxLoadingPlayers = 6;
         
         Parser.Default.ParseArguments<Options>(args)
             .WithParsed(o =>
@@ -201,9 +198,10 @@ internal static class Program
             }
             else if (useRampUp)
             {
-                const int limit = 950;
+                const int limit = 900;
                 
-                var deduct = (loaded * 2) < limit ? (loaded * 2) : limit;
+                var deduct = (loaded * rampLevel) < limit ? (loaded * rampLevel) : limit;
+                
                 await Task.Delay(1_000 - deduct);
             }
             else

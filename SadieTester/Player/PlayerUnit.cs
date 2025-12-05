@@ -181,7 +181,7 @@ namespace SadieTester.Player
                 }
                 else if (NoRoomTicks >= 3)
                 {
-                    await WaitForNavigatorResultsAsync(TimeSpan.FromSeconds(1));
+                    await WaitForNavigatorResultsAsync(TimeSpan.FromMilliseconds(600));
 
                     var enterableResults = NavigatorSearchResults
                         .Where(x => x.UsersNow < x.MaxUsers - 1)
@@ -210,7 +210,7 @@ namespace SadieTester.Player
 
             if (SecureRandom.OneIn(5))
             {
-                await WaitForNavigatorResultsAsync(TimeSpan.FromSeconds(1));
+                await WaitForNavigatorResultsAsync(TimeSpan.FromMilliseconds(600));
 
                 var enterableResults = NavigatorSearchResults
                     .Where(x => x.UsersNow < x.MaxUsers - 1)
@@ -242,12 +242,6 @@ namespace SadieTester.Player
                 await LoadRandomRoomAsync();
         }
 
-        private bool ShouldMakeRoom()
-        {
-            var capped = Math.Min(NoRoomTicks, 70);
-            return SecureRandom.OneIn(150 - capped * 2);
-        }
-
         public List<NavigatorSearchRoomResult> NavigatorSearchResults = [];
 
         private async Task WaitForNavigatorResultsAsync(TimeSpan timeout)
@@ -266,13 +260,13 @@ namespace SadieTester.Player
                 if ((DateTime.Now - started) > timeout)
                     return;
 
-                await Task.Delay(100);
+                await Task.Delay(50);
             }
         }
 
         public async Task LoadRandomRoomAsync()
         {
-            await WaitForNavigatorResultsAsync(TimeSpan.FromSeconds(2));
+            await WaitForNavigatorResultsAsync(TimeSpan.FromMilliseconds(600));
 
             var options = NavigatorSearchResults
                 .Where(x => x.UsersNow < x.MaxUsers - 1)
@@ -287,7 +281,7 @@ namespace SadieTester.Player
                 await LoadRoomAsync(roomId);
                 NavigatorSearchResults.Clear();
             }
-            else if (SecureRandom.OneIn(100))
+            else if (SecureRandom.OneIn(50))
             {
                 await CreateRoomAsync();
             }
@@ -312,7 +306,7 @@ namespace SadieTester.Player
         public async Task SayInRoomAsync(string msg, int bubble = 0)
         {
             await SafeSendAsync(new RoomUserStartTypingWriter().GetAllBytes());
-            await Task.Delay(msg.Length * 95);
+            await Task.Delay(msg.Length * 100);
             await SafeSendAsync(new RoomUserChat(msg, bubble).GetAllBytes());
             await Task.Delay(100);
             await SafeSendAsync(new RoomUserStopTypingWriter().GetAllBytes());
@@ -321,12 +315,10 @@ namespace SadieTester.Player
         public async Task CreateRoomAsync()
         {
             NoRoomTicks = 0;
-            
-            Console.WriteLine("Making a room...");
 
             var faker = new Faker<CreateRoomData>()
                 .RuleFor(u => u.Name, f => f.Address.StreetAddress())
-                .RuleFor(u => u.Description, f => f.Lorem.Sentences(3))
+                .RuleFor(u => u.Description, f => f.Lorem.Sentences(SecureRandom.Next(2, 4)))
                 .RuleFor(u => u.Layout, f => ModelSelector.GetRandomModel());
 
             var data = faker.Generate();
@@ -339,7 +331,9 @@ namespace SadieTester.Player
             cts.Cancel();
 
             if (websocketClient is IAsyncDisposable asyncWs)
+            {
                 return asyncWs.DisposeAsync();
+            }
 
             websocketClient.Dispose();
             return ValueTask.CompletedTask;

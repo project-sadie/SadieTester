@@ -1,5 +1,4 @@
 using AutoMapper;
-using Microsoft.Extensions.DependencyInjection;
 using SadieTester.Networking.Packets;
 using SadieTester.Player;
 using Websocket.Client;
